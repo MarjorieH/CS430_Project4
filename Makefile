@@ -3,3 +3,6 @@ all: raytrace.c
 
 clean:
 	rm -rf raytrace *~
+
+test:
+	./raytrace 100 150 input.json output.ppm
