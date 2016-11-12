@@ -29,6 +29,9 @@ typedef struct {
   double position[3];
   double diffuseColor[3];
   double specularColor[3];
+  double reflectivity;
+  double refractivity;
+  double ior;
   union {
     struct {
       double normal[3];

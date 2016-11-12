@@ -615,6 +615,36 @@ void read_scene(char* filename) {
               exit(1);
             }
           }
+          else if (strcmp(key, "reflectivity") == 0) {
+            double value = next_number(json);
+            if (kind == 0 || kind == 1) {
+              physicalObjects[numPhysicalObjects].reflectivity = value;
+            }
+            else {
+              fprintf(stderr, "Error: Unexpected 'reflectivity' attribute on line %d.\n", line);
+              exit(1);
+            }
+          }
+          else if (strcmp(key, "refractivity") == 0) {
+            double value = next_number(json);
+            if (kind == 0 || kind == 1) {
+              physicalObjects[numPhysicalObjects].refractivity = value;
+            }
+            else {
+              fprintf(stderr, "Error: Unexpected 'refractivity' attribute on line %d.\n", line);
+              exit(1);
+            }
+          }
+          else if (strcmp(key, "ior") == 0) {
+            double value = next_number(json);
+            if (kind == 0 || kind == 1) {
+              physicalObjects[numPhysicalObjects].ior = value;
+            }
+            else {
+              fprintf(stderr, "Error: Unexpected 'ior' attribute on line %d.\n", line);
+              exit(1);
+            }
+          }
           else {
             fprintf(stderr, "Error: Unknown property, \"%s\", on line %d.\n", key, line);
             exit(1);
