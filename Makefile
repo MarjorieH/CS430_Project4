@@ -5,4 +5,4 @@ clean:
 	rm -rf raytrace *~
 
 test:
-	./raytrace 100 150 input.json output.ppm
+	./raytrace 400 400 input.json output.ppm
