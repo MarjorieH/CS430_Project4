@@ -10,9 +10,9 @@
 #define maxObjects 128
 #define epsilon 0.0000001 // tolerated error for comparing doubles
 
-#define ambientIntensity 1 // ambient lighting
-#define diffuseIntensity 1 // diffuse lighting
-#define specularIntensity 1 // specular lighting
+#define ambientIntensity 1 // ambient lighting contribution (1 = 100%)
+#define diffuseIntensity 1 // diffuse lighting contribution (1 = 100%)
+#define specularIntensity 1 // specular lighting contribution (1 = 100%)
 
 #define ambience 0 // ambient lighting color
 #define specularPower 20 // degree of specular reflection, hard coded to 20

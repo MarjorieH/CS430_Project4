@@ -391,14 +391,13 @@ void read_scene(char* filename) {
     fprintf(stderr, "Error: Could not open file \"%s\"\n", filename);
     exit(1);
   }
-  int camFlag = 0; // boolean to see if we have a camera obj yet
+  int camFlag = 0; // boolean to check if we have a camera obj yet
 
   skip_ws(json);
   expect_c(json, '['); // Find the beginning of the list
   skip_ws(json);
 
-  // Find the objects
-  while (1) {
+  while (1) { // parse through all the objects in the scene
 
     c = fgetc(json);
     if (c == ']') {
@@ -657,12 +656,7 @@ void read_scene(char* filename) {
         }
       } // end loop through object fields
 
-      if (camFlag == 0) { // ensure that we parsed a camera
-        fprintf(stderr, "Error: The JSON file does not contain a camera object.\n");
-        exit(1);
-      }
-
-      // increment appropriate counter
+      // increment appropriate counter for the object that we just parsed
       if (kind == 0 || kind == 1) {
         numPhysicalObjects++;
       }
@@ -685,6 +679,11 @@ void read_scene(char* filename) {
       }
     }
   } // end loop through all objects in scene
+
+  if (camFlag == 0) { // ensure that we parsed a camera object for the scene
+    fprintf(stderr, "Error: The JSON file does not contain a camera object.\n");
+    exit(1);
+  }
 }
 
 // function to print out all the objects to stdout, for debugging
