@@ -76,7 +76,7 @@ unsigned char double_to_color(double color);
 void expect_c(FILE* json, int d);
 double fang(double angularA0, double theta, double* lightToObj, double* lightDirection);
 double frad(double lightDistance, double a0, double a1, double a2);
-void illuminate(double colorObjT, Object colorObj, double* Rd, double* Ro, int pixIndex);
+double* illuminate(double colorObjT, Object colorObj, double* Rd, double* Ro);
 int next_c(FILE* json);
 double next_number(FILE* json);
 char* next_string(FILE* json);

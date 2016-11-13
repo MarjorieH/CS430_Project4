@@ -54,6 +54,8 @@ unsigned char double_to_color(double color) {
   return (unsigned char)(maxColor * color);
 }
 
+
+
 // Cast the objects in the scene
 void raycast() {
 
@@ -101,7 +103,10 @@ void raycast() {
       }
       // place the pixel into the pixmap array, with illumination
       if (closestT > 0 && closestT != INFINITY) {
-        illuminate(closestT, closestObject, Rd, Ro, pixIndex);
+        double* color = illuminate(closestT, closestObject, Rd, Ro);
+        pixmap[pixIndex].R = color[0];
+        pixmap[pixIndex].G = color[1];
+        pixmap[pixIndex].B = color[2];
       }
       else { // make background pixels black
         pixmap[pixIndex].R = 0;
@@ -113,15 +118,15 @@ void raycast() {
   }
 }
 
-void illuminate(double colorObjT, Object colorObj, double* Rd, double* Ro, int pixIndex) {
-  // initialize values for color, would be where ambient color goes
-  double color[3];
+double* illuminate(double colorObjT, Object colorObj, double* Rd, double* Ro) {
 
+  // initialize values for color
+  double* color = malloc(3 * sizeof(double));
   color[0] = ambientIntensity * ambience;
   color[1] = ambientIntensity * ambience;
   color[2] = ambientIntensity * ambience;
 
-  int kind = colorObj.kind;
+  int kind = colorObj.kind; // get the kind of obj we are handling
 
   double objOrigin[3]; // where the current object pixel is in space
   v3_scale(Rd, colorObjT, objOrigin);
@@ -176,6 +181,7 @@ void illuminate(double colorObjT, Object colorObj, double* Rd, double* Ro, int p
         continue; // skip over the object we are coloring
       }
 
+      // start ray slightly off of the object to prevent static
       double* newObjOrigin = malloc(3 * sizeof(double));
       v3_scale(objToLight, 0.0000001, newObjOrigin);
       v3_add(newObjOrigin, objOrigin, newObjOrigin);
@@ -190,7 +196,7 @@ void illuminate(double colorObjT, Object colorObj, double* Rd, double* Ro, int p
         fprintf(stderr, "Unrecognized object.\n");
         exit(1);
       }
-
+      // check if the point is in a shadow
       if (currentT <= lightDistance && currentT > 0 && currentT < INFINITY) {
         shadow = 1;
         break;
@@ -216,9 +222,13 @@ void illuminate(double colorObjT, Object colorObj, double* Rd, double* Ro, int p
       color[2] += fRad * fAng * (diffuse[2] + specular[2]);
     }
   }
-  pixmap[pixIndex].R = double_to_color(color[0]);
-  pixmap[pixIndex].G = double_to_color(color[1]);
-  pixmap[pixIndex].B = double_to_color(color[2]);
+  color[0] = double_to_color(color[0]);
+  color[1] = double_to_color(color[1]);
+  color[2] = double_to_color(color[2]);
+  return color;
+  //pixmap[pixIndex].R = double_to_color(color[0]);
+  //pixmap[pixIndex].G = double_to_color(color[1]);
+  //pixmap[pixIndex].B = double_to_color(color[2]);
 }
 
 
@@ -233,7 +243,10 @@ int obj_compare(Object a, Object b) {
     equal(a.specularColor[2], b.specularColor[2]) &&
     equal(a.position[0], b.position[0]) &&
     equal(a.position[1], b.position[1]) &&
-    equal(a.position[2], b.position[2])) {
+    equal(a.position[2], b.position[2]) &&
+    equal(a.reflectivity, b.reflectivity) &&
+    equal(a.refractivity, b.refractivity) &&
+    equal(a.ior, b.ior)) {
       if (a.kind == 0 &&
         equal(a.plane.normal[0], b.plane.normal[0]) &&
         equal(a.plane.normal[1], b.plane.normal[1]) &&
