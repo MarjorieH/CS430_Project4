@@ -54,8 +54,6 @@ unsigned char double_to_color(double color) {
   return (unsigned char)(maxColor * color);
 }
 
-
-
 // Cast the objects in the scene
 void raycast() {
 
@@ -103,22 +101,164 @@ void raycast() {
       }
       // place the pixel into the pixmap array, with illumination
       if (closestT > 0 && closestT != INFINITY) {
-        double* color = illuminate(closestT, closestObject, Rd, Ro);
+        double* color = shade(closestObject, Rd, Ro, 0);
+        v3_add(color, local_illumination(closestT, closestObject, Rd, Ro), color);
         pixmap[pixIndex].R = color[0];
         pixmap[pixIndex].G = color[1];
         pixmap[pixIndex].B = color[2];
       }
       else { // make background pixels black
-        pixmap[pixIndex].R = 0;
-        pixmap[pixIndex].G = 0;
-        pixmap[pixIndex].B = 0;
+        pixmap[pixIndex].R = backgroundColor;
+        pixmap[pixIndex].G = backgroundColor;
+        pixmap[pixIndex].B = backgroundColor;
       }
       pixIndex++;
     }
   }
 }
 
-double* illuminate(double colorObjT, Object colorObj, double* Rd, double* Ro) {
+// helper function that returns the reflection of vector V1 across vector V2
+double* calculate_reflection(double* V1, double* V2) {
+  double* RV = malloc(3 * sizeof(double));
+  v3_scale(V2, 2 * v3_dot(V2, V1), RV);
+  v3_subtract(V1, RV, RV);
+  normalize(RV);
+  return RV;
+}
+
+double* shade(Object objectHit, double* position, double* Ur, int level) {
+
+  double* color = malloc(3 * sizeof(double));
+
+  // passed the maximum number of recursive calls, set color to black
+  if (level > maxRecursionLevel) {
+    color[0] = 0.0;
+    color[1] = 0.0;
+    color[2] = 0.0;
+  }
+  else {
+
+    int kind = objectHit.kind;
+
+    // get object's surface normal
+    double* surfaceNormal = malloc(3 * sizeof(double)); // surface normal of the object
+    if (kind == 0) { // plane
+      surfaceNormal = objectHit.plane.normal;
+    }
+    else { // sphere
+      v3_subtract(position, objectHit.position, surfaceNormal);
+    }
+    normalize(surfaceNormal);
+
+    // Um = reflection of Ur across object surface
+    double* Um = calculate_reflection(Ur, surfaceNormal);
+
+    // shoot a ray into space from the hit position in the direction Um
+    double bestT = INFINITY;
+    Object bounceObj;
+    for (int i = 0; i < numPhysicalObjects; i++) {
+      double currentT = 0.0;
+      Object currentObj = physicalObjects[i];
+
+      // skip over the object we are shading
+      if (obj_compare(bounceObj, objectHit)) {
+        continue;
+      }
+
+      if (currentObj.kind == 0) { // plane
+        currentT = plane_intersection(position, Um, currentObj.position, currentObj.plane.normal);
+      }
+      else if (currentObj.kind == 1) { // sphere
+        currentT = sphere_intersection(position, Um, currentObj.position, currentObj.sphere.radius);
+      }
+      else { // ???
+        fprintf(stderr, "Unrecognized object.\n");
+        exit(1);
+      }
+
+      if (currentT < bestT && currentT > 0.0) {
+        bestT = currentT;
+        bounceObj = currentObj;
+      }
+    }
+
+    if (bestT > 0.0 && bestT != INFINITY) {
+
+      // calculate the position of the hit point on the bounceObj
+      double* newPosition = malloc(3 * sizeof(double));
+      v3_scale(Um, bestT, newPosition);
+      v3_add(position, newPosition, newPosition);
+
+      // recursive call the shade routine for the new hit point to get its color
+      level++;
+      double* newColor = shade(bounceObj, newPosition, Um, level);
+      v3_scale(newColor, bounceObj.reflectivity, newColor); // scale the color based on the object's reflectivity
+
+      color = direct_shade(objectHit, position, newColor, Um, newPosition);
+    }
+    else { // the bounce ray did not hit anything, assign background color
+      color[0] = backgroundColor;
+      color[1] = backgroundColor;
+      color[2] = backgroundColor;
+    }
+  }
+  color[0] = double_to_color(color[0]);
+  color[1] = double_to_color(color[1]);
+  color[2] = double_to_color(color[2]);
+  return color;
+}
+
+double* direct_shade(Object shadeObj, double* hitPoint, double* lightColor, double* lightDirection, double* lightPosition) {
+
+  // initialize values for color
+  double* color = malloc(3 * sizeof(double));
+  color[0] = ambientIntensity * ambience;
+  color[1] = ambientIntensity * ambience;
+  color[2] = ambientIntensity * ambience;
+
+  int kind = shadeObj.kind;
+
+  double* objToCam = malloc(3 * sizeof(double)); // vector from the object to the camera
+  v3_subtract(cameraObject.position, hitPoint, objToCam);
+  normalize(objToCam);
+
+  double* surfaceNormal = malloc(3 * sizeof(double)); // surface normal of the object
+  if (kind == 0) { // plane
+    surfaceNormal = shadeObj.plane.normal;
+  }
+  else { // sphere
+    v3_subtract(hitPoint, shadeObj.position, surfaceNormal);
+  }
+  normalize(surfaceNormal);
+
+  double objToLight[3]; // ray from object to the light
+  v3_subtract(lightPosition, hitPoint, objToLight);
+  normalize(objToLight);
+
+  // reflection of the ray of light hitting the surface, symmetrical across the normal
+  double* reflection = calculate_reflection(lightDirection, surfaceNormal);
+
+  double diffuseFactor = v3_dot(surfaceNormal, objToLight);
+  double specularFactor = v3_dot(reflection, objToCam);
+
+  double diffuse[3];
+  diffuse[0] = diffuse_reflection(lightColor[0], shadeObj.diffuseColor[0], diffuseFactor);
+  diffuse[1] = diffuse_reflection(lightColor[1], shadeObj.diffuseColor[1], diffuseFactor);
+  diffuse[2] = diffuse_reflection(lightColor[2], shadeObj.diffuseColor[2], diffuseFactor);
+
+  double specular[3];
+  specular[0] = specular_reflection(lightColor[0], shadeObj.specularColor[0], diffuseFactor, specularFactor);
+  specular[1] = specular_reflection(lightColor[1], shadeObj.specularColor[1], diffuseFactor, specularFactor);
+  specular[2] = specular_reflection(lightColor[2], shadeObj.specularColor[2], diffuseFactor, specularFactor);
+
+  color[0] += diffuse[0] + specular[0];
+  color[1] += diffuse[1] + specular[1];
+  color[2] += diffuse[2] + specular[2];
+
+  return color;
+}
+
+double* local_illumination(double colorObjT, Object colorObj, double* Rd, double* Ro) {
 
   // initialize values for color
   double* color = malloc(3 * sizeof(double));
@@ -128,22 +268,22 @@ double* illuminate(double colorObjT, Object colorObj, double* Rd, double* Ro) {
 
   int kind = colorObj.kind; // get the kind of obj we are handling
 
-  double objOrigin[3]; // where the current object pixel is in space
-  v3_scale(Rd, colorObjT, objOrigin);
-  v3_add(objOrigin, Ro, objOrigin);
+  double hitPoint[3]; // where the current object pixel is in space
+  v3_scale(Rd, colorObjT, hitPoint);
+  v3_add(hitPoint, Ro, hitPoint);
 
   double* objToCam = malloc(3 * sizeof(double)); // vector from the object to the camera
-  v3_subtract(cameraObject.position, objOrigin, objToCam);
+  v3_subtract(cameraObject.position, hitPoint, objToCam);
   normalize(objToCam);
 
-  double* surfaceNormal = malloc(3 * sizeof(double));; // surface normal of the object
+  double* surfaceNormal = malloc(3 * sizeof(double)); // surface normal of the object
   if (kind == 0) { // plane
     surfaceNormal = colorObj.plane.normal;
   }
   else { // sphere
-    v3_subtract(objOrigin, colorObj.position, surfaceNormal);
+    v3_subtract(hitPoint, colorObj.position, surfaceNormal);
   }
-  normalize(surfaceNormal); // TODO: This should really be moved elsewhere to save CPU...
+  normalize(surfaceNormal);
 
   // loop through all the lights in the lights array
   for (int i = 0; i < numLightObjects; i++) {
@@ -155,22 +295,19 @@ double* illuminate(double colorObjT, Object colorObj, double* Rd, double* Ro) {
     normalize(lightToObj);
 
     double objToLight[3]; // ray from object towards the light
-    v3_subtract(lightObjects[i].position, objOrigin, objToLight);
+    v3_subtract(lightObjects[i].position, hitPoint, objToLight);
     normalize(objToLight);
 
     double* lightDirection = lightObjects[i].light.direction;
     normalize(lightDirection);
 
     // reflection of the ray of light hitting the surface, symmetrical across the normal
-    double* reflection = malloc(3 * sizeof(double)); // R =  lightToObj - 2 * N * (N dot lightToObj)
-    v3_scale(surfaceNormal, 2  * v3_dot(surfaceNormal, lightToObj), reflection);
-    v3_subtract(lightToObj, reflection, reflection);
-    normalize(reflection);
+    double* reflection = calculate_reflection(lightToObj, surfaceNormal);
 
     double diffuseFactor = v3_dot(surfaceNormal, objToLight);
     double specularFactor = v3_dot(reflection, objToCam);
 
-    double lightDistance = p3_distance(lightObjects[i].position, objOrigin); // distance from the light to the current pixel
+    double lightDistance = p3_distance(lightObjects[i].position, hitPoint); // distance from the light to the current pixel
 
     int shadow = 0;
     double currentT = 0.0;
@@ -181,16 +318,16 @@ double* illuminate(double colorObjT, Object colorObj, double* Rd, double* Ro) {
         continue; // skip over the object we are coloring
       }
 
-      // start ray slightly off of the object to prevent static
-      double* newObjOrigin = malloc(3 * sizeof(double));
-      v3_scale(objToLight, 0.0000001, newObjOrigin);
-      v3_add(newObjOrigin, objOrigin, newObjOrigin);
+      // start ray slightly off of the object to prevent static (self shading problem)
+      double* newHitPoint = malloc(3 * sizeof(double));
+      v3_scale(objToLight, epsilon, newHitPoint);
+      v3_add(newHitPoint, hitPoint, newHitPoint);
 
       if (currentObj.kind == 0) { // plane
-        currentT = plane_intersection(newObjOrigin, objToLight, currentObj.position, currentObj.plane.normal);
+        currentT = plane_intersection(newHitPoint, objToLight, currentObj.position, currentObj.plane.normal);
       }
       else if (currentObj.kind == 1) { // sphere
-        currentT = sphere_intersection(newObjOrigin, objToLight, currentObj.position, currentObj.sphere.radius);
+        currentT = sphere_intersection(newHitPoint, objToLight, currentObj.position, currentObj.sphere.radius);
       }
       else { // ???
         fprintf(stderr, "Unrecognized object.\n");
@@ -226,11 +363,7 @@ double* illuminate(double colorObjT, Object colorObj, double* Rd, double* Ro) {
   color[1] = double_to_color(color[1]);
   color[2] = double_to_color(color[2]);
   return color;
-  //pixmap[pixIndex].R = double_to_color(color[0]);
-  //pixmap[pixIndex].G = double_to_color(color[1]);
-  //pixmap[pixIndex].B = double_to_color(color[2]);
 }
-
 
 // returns 1 if the physical objects are equal, 0 if not
 int obj_compare(Object a, Object b) {

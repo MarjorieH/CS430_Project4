@@ -9,6 +9,7 @@
 #define format '3' // format of output image data
 #define maxObjects 128
 #define epsilon 0.0000001 // tolerated error for comparing doubles
+#define maxRecursionLevel 7 // number of recursive calls for ray tracing
 
 #define ambientIntensity 1 // ambient lighting contribution (1 = 100%)
 #define diffuseIntensity 1 // diffuse lighting contribution (1 = 100%)
@@ -16,6 +17,7 @@
 
 #define ambience 0 // ambient lighting color
 #define specularPower 20 // degree of specular reflection, hard coded to 20
+#define backgroundColor 0 // background of the scene
 
 // Structure to hold RGB pixel data
 typedef struct RGBpixel {
@@ -71,12 +73,14 @@ Object cameraObject;
 int line = 1; // keep track of the line number inside of the json file
 
 // function prototype declarations
+double* calculate_reflection(double* V, double* N);
 double diffuse_reflection(double lightColor, double diffuseColor, double diffuseFactor);
+double* direct_shade(Object shadeObj, double* hitPoint, double* lightColor, double* lightDirection, double* lightPosition);
 unsigned char double_to_color(double color);
 void expect_c(FILE* json, int d);
 double fang(double angularA0, double theta, double* lightToObj, double* lightDirection);
 double frad(double lightDistance, double a0, double a1, double a2);
-double* illuminate(double colorObjT, Object colorObj, double* Rd, double* Ro);
+double* local_illumination(double colorObjT, Object colorObj, double* Rd, double* Ro);
 int next_c(FILE* json);
 double next_number(FILE* json);
 char* next_string(FILE* json);
@@ -87,15 +91,14 @@ void printObjs();
 void printPixMap();
 void raycast();
 void read_scene(char* filename);
+double* shade(Object objectHit, double* position, double* Ur, int level);
 void skip_ws(FILE* json);
 double specular_reflection(double lightColor, double specularColor, double diffuseFactor, double specularFactor);
 double sphere_intersection(double* Ro, double* Rd, double* C, double r);
 void writeP3(FILE* fh);
 
 // static inline functions
-
-// returns 1 if values are equal, 0 if not
-static inline int equal(double a, double b) {
+static inline int equal(double a, double b) { // returns 1 if values are equal, 0 if not
   return fabs(a - b) < epsilon;
 }
 static inline double sqr(double v) {
