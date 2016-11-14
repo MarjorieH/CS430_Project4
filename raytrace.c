@@ -132,6 +132,31 @@ double* calculate_reflection(double* V1, double* V2) {
   return RV;
 }
 
+double* calculate_refraction(double externalIOR, double transmitIOR, double* incomingRay, double* normal) {
+
+  double* transmittedRay = malloc(3 * sizeof(double));
+
+  double eta, c1, cs2;
+  eta = externalIOR / transmitIOR; // might need to switch these... relative index of refraction
+  c1 = v3_dot(incomingRay, normal) * -1; // cos(theta)
+  cs2 = 1 - eta * eta * (1 - c1 * c1); // cos^2(phi)
+
+  if (cs2 < 0) { // total internal reflection
+    transmittedRay[0] = 0.0;
+    transmittedRay[1] = 0.0;
+    transmittedRay[2] = 0.0;
+    return transmittedRay;
+  }
+
+  // Linear combination:
+  // transmittedRay = eta * incomingRay + (eta * c1 - sqrt(cs2)) * normal
+  double* temp = malloc(3 * sizeof(double));
+  v3_scale(incomingRay, eta, temp);
+  v3_scale(normal, eta * c1 - sqrt(cs2), transmittedRay);
+  v3_add(temp, transmittedRay, transmittedRay);
+  return transmittedRay;
+}
+
 double* shade(Object objectHit, double* position, double* Ur, int level) {
 
   double* color = malloc(3 * sizeof(double));
@@ -201,10 +226,17 @@ double* shade(Object objectHit, double* position, double* Ur, int level) {
 
       // recursively call the shade routine for the new hit point to get its color
       level++;
-      double* newColor = shade(bounceObj, newPosition, Um, level);
-      v3_scale(newColor, bounceObj.reflectivity, newColor); // scale the color based on the object's reflectivity
+      double* reflectColor = shade(bounceObj, newPosition, Um, level);
+      v3_scale(reflectColor, bounceObj.reflectivity, reflectColor); // scale the color based on the object's reflectivity
 
-      color = direct_shade(objectHit, position, newColor, Um, newPosition);
+      // calculate refraction
+      double* refractedRay = calculate_refraction(objectHit.ior, bounceObj.ior, Um, surfaceNormal);
+      double* refractColor = shade(bounceObj, newPosition, refractedRay, level);
+      v3_scale(refractColor, bounceObj.refractivity, refractColor);
+
+      v3_add(refractColor, refractColor, color);
+
+      color = direct_shade(objectHit, position, color, Um, newPosition);
     }
     else { // the bounce ray did not hit anything, assign background color
       color[0] = backgroundColor;
@@ -216,6 +248,8 @@ double* shade(Object objectHit, double* position, double* Ur, int level) {
 
   return color;
 }
+
+
 
 double* direct_shade(Object shadeObj, double* hitPoint, double* lightColor, double* lightDirection, double* lightPosition) {
 

@@ -74,6 +74,7 @@ int line = 1; // keep track of the line number inside of the json file
 
 // function prototype declarations
 double* calculate_reflection(double* V, double* N);
+double* calculate_refraction(double externalIOR, double transmitIOR, double* incomingRay, double* normal);
 double diffuse_reflection(double lightColor, double diffuseColor, double diffuseFactor);
 double* direct_shade(Object shadeObj, double* hitPoint, double* lightColor, double* lightDirection, double* lightPosition);
 unsigned char double_to_color(double color);
