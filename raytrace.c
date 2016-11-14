@@ -101,16 +101,22 @@ void raycast() {
       }
       // place the pixel into the pixmap array, with illumination
       if (closestT > 0 && closestT != INFINITY) {
-        double* color = shade(closestObject, Rd, Ro, 0);
-        v3_add(color, local_illumination(closestT, closestObject, Rd, Ro), color);
-        pixmap[pixIndex].R = color[0];
-        pixmap[pixIndex].G = color[1];
-        pixmap[pixIndex].B = color[2];
+
+        // get the position of the point that was hit by the ray
+        double* hitPoint = malloc(3 * sizeof(double));
+        v3_scale(Rd, closestT, hitPoint);
+        v3_add(Ro, hitPoint, hitPoint);
+
+        double* color = shade(closestObject, hitPoint, Rd, 0);
+
+        pixmap[pixIndex].R = double_to_color(color[0]);
+        pixmap[pixIndex].G = double_to_color(color[1]);
+        pixmap[pixIndex].B = double_to_color(color[2]);
       }
       else { // make background pixels black
-        pixmap[pixIndex].R = backgroundColor;
-        pixmap[pixIndex].G = backgroundColor;
-        pixmap[pixIndex].B = backgroundColor;
+        pixmap[pixIndex].R = double_to_color(backgroundColor);
+        pixmap[pixIndex].G = double_to_color(backgroundColor);
+        pixmap[pixIndex].B = double_to_color(backgroundColor);
       }
       pixIndex++;
     }
@@ -165,11 +171,16 @@ double* shade(Object objectHit, double* position, double* Ur, int level) {
         continue;
       }
 
+      // start ray slightly off of the object to prevent static (self shading problem)
+      double* modifiedPosition = malloc(3 * sizeof(double));
+      v3_scale(Um, epsilon, modifiedPosition);
+      v3_add(modifiedPosition, position, modifiedPosition);
+
       if (currentObj.kind == 0) { // plane
-        currentT = plane_intersection(position, Um, currentObj.position, currentObj.plane.normal);
+        currentT = plane_intersection(modifiedPosition, Um, currentObj.position, currentObj.plane.normal);
       }
       else if (currentObj.kind == 1) { // sphere
-        currentT = sphere_intersection(position, Um, currentObj.position, currentObj.sphere.radius);
+        currentT = sphere_intersection(modifiedPosition, Um, currentObj.position, currentObj.sphere.radius);
       }
       else { // ???
         fprintf(stderr, "Unrecognized object.\n");
@@ -183,13 +194,12 @@ double* shade(Object objectHit, double* position, double* Ur, int level) {
     }
 
     if (bestT > 0.0 && bestT != INFINITY) {
-
       // calculate the position of the hit point on the bounceObj
       double* newPosition = malloc(3 * sizeof(double));
       v3_scale(Um, bestT, newPosition);
       v3_add(position, newPosition, newPosition);
 
-      // recursive call the shade routine for the new hit point to get its color
+      // recursively call the shade routine for the new hit point to get its color
       level++;
       double* newColor = shade(bounceObj, newPosition, Um, level);
       v3_scale(newColor, bounceObj.reflectivity, newColor); // scale the color based on the object's reflectivity
@@ -201,10 +211,9 @@ double* shade(Object objectHit, double* position, double* Ur, int level) {
       color[1] = backgroundColor;
       color[2] = backgroundColor;
     }
+    v3_add(color, local_illumination(position, objectHit), color);
   }
-  color[0] = double_to_color(color[0]);
-  color[1] = double_to_color(color[1]);
-  color[2] = double_to_color(color[2]);
+
   return color;
 }
 
@@ -258,7 +267,7 @@ double* direct_shade(Object shadeObj, double* hitPoint, double* lightColor, doub
   return color;
 }
 
-double* local_illumination(double colorObjT, Object colorObj, double* Rd, double* Ro) {
+double* local_illumination(double* hitPoint, Object colorObj) {
 
   // initialize values for color
   double* color = malloc(3 * sizeof(double));
@@ -267,10 +276,6 @@ double* local_illumination(double colorObjT, Object colorObj, double* Rd, double
   color[2] = ambientIntensity * ambience;
 
   int kind = colorObj.kind; // get the kind of obj we are handling
-
-  double hitPoint[3]; // where the current object pixel is in space
-  v3_scale(Rd, colorObjT, hitPoint);
-  v3_add(hitPoint, Ro, hitPoint);
 
   double* objToCam = malloc(3 * sizeof(double)); // vector from the object to the camera
   v3_subtract(cameraObject.position, hitPoint, objToCam);
@@ -289,9 +294,7 @@ double* local_illumination(double colorObjT, Object colorObj, double* Rd, double
   for (int i = 0; i < numLightObjects; i++) {
 
     double lightToObj[3]; // ray from light towards the object
-    v3_scale(Rd, colorObjT, lightToObj);
-    v3_add(lightToObj, Ro, lightToObj);
-    v3_subtract(lightToObj, lightObjects[i].position, lightToObj);
+    v3_subtract(hitPoint, lightObjects[i].position, lightToObj);
     normalize(lightToObj);
 
     double objToLight[3]; // ray from object towards the light
@@ -359,9 +362,9 @@ double* local_illumination(double colorObjT, Object colorObj, double* Rd, double
       color[2] += fRad * fAng * (diffuse[2] + specular[2]);
     }
   }
-  color[0] = double_to_color(color[0]);
-  color[1] = double_to_color(color[1]);
-  color[2] = double_to_color(color[2]);
+  //color[0] = double_to_color(color[0]);
+  //color[1] = double_to_color(color[1]);
+  //color[2] = double_to_color(color[2]);
   return color;
 }
 

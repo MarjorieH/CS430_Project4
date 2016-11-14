@@ -17,7 +17,7 @@
 
 #define ambience 0 // ambient lighting color
 #define specularPower 20 // degree of specular reflection, hard coded to 20
-#define backgroundColor 0 // background of the scene
+#define backgroundColor 0.0 // background of the scene
 
 // Structure to hold RGB pixel data
 typedef struct RGBpixel {
@@ -80,7 +80,7 @@ unsigned char double_to_color(double color);
 void expect_c(FILE* json, int d);
 double fang(double angularA0, double theta, double* lightToObj, double* lightDirection);
 double frad(double lightDistance, double a0, double a1, double a2);
-double* local_illumination(double colorObjT, Object colorObj, double* Rd, double* Ro);
+double* local_illumination(double* hitPoint, Object colorObj);
 int next_c(FILE* json);
 double next_number(FILE* json);
 char* next_string(FILE* json);
