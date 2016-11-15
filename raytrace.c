@@ -268,7 +268,7 @@ double* shade(Object objectHit, double* position, double* Ur, int level, double 
       }
       else { // the bounce ray did not hit anything, assign background color
         color[0] += backgroundColor;
-        color[1] += backgroundColor; // maybe add these instead of assign?
+        color[1] += backgroundColor;
         color[2] += backgroundColor;
       }
     } // end reflection if
@@ -357,13 +357,15 @@ double* shade(Object objectHit, double* position, double* Ur, int level, double 
         double* refractColor = shade(refractObj, newPosition, nextRefractedRay, level, objectHit.ior);
         v3_scale(refractColor, objectHit.refractivity, refractColor);
 
-        //v3_add(color, direct_shade(objectHit, position, refractObj.diffuseColor, Ur, cameraObject.position), color);
+        // add in the direct shading of the refracted object, as if a light were shining off the back of the external object
+        v3_add(color, direct_shade(refractObj, newPosition, refractColor, nextRefractedRay, backPosition), color);
 
+        // add the refracted color to the accumulating color of the object
         v3_add(color, refractColor, color);
       }
-      else {
+      else { // refraction ray did not hit anything, add on background color
         color[0] += backgroundColor;
-        color[1] += backgroundColor; // maybe add these instead of assign?
+        color[1] += backgroundColor;
         color[2] += backgroundColor;
       }
     } // end refraction if
