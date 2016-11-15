@@ -210,6 +210,9 @@ double* shade(Object objectHit, double* position, double* Ur, int level, double 
     }
     normalize(surfaceNormal);
 
+    // add in the contribution of the local illumination from the light sources to the object
+    v3_add(color, local_illumination(position, objectHit), color);
+
     //check if we need to calculate reflection
     if (objectHit.reflectivity > 0.0) {
       // reflectRay = reflection of Ur across object surface
@@ -354,10 +357,9 @@ double* shade(Object objectHit, double* position, double* Ur, int level, double 
         double* refractColor = shade(refractObj, newPosition, nextRefractedRay, level, objectHit.ior);
         v3_scale(refractColor, objectHit.refractivity, refractColor);
 
-        //v3_scale(refractedRay, -1, refractedRay);
-        //v3_add(color, direct_shade(objectHit, position, color, refractedRay, newPosition), color);
+        //v3_add(color, direct_shade(objectHit, position, refractObj.diffuseColor, Ur, cameraObject.position), color);
 
-        v3_add(refractColor, refractColor, color);
+        v3_add(color, refractColor, color);
       }
       else {
         color[0] += backgroundColor;
@@ -365,9 +367,6 @@ double* shade(Object objectHit, double* position, double* Ur, int level, double 
         color[2] += backgroundColor;
       }
     } // end refraction if
-
-    // add in the contribution of the local illumination from the light sources to the object
-    v3_add(color, local_illumination(position, objectHit), color);
   }
 
   return color;
