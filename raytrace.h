@@ -10,6 +10,7 @@
 #define maxObjects 128
 #define epsilon 0.0000001 // tolerated error for comparing doubles
 #define maxRecursionLevel 7 // number of recursive calls for ray tracing
+#define airRefractivity 1.0
 
 #define ambientIntensity 1 // ambient lighting contribution (1 = 100%)
 #define diffuseIntensity 1 // diffuse lighting contribution (1 = 100%)
@@ -95,7 +96,7 @@ void read_scene(char* filename);
 double* shade(Object objectHit, double* position, double* Ur, int level, double rindex);
 void skip_ws(FILE* json);
 double specular_reflection(double lightColor, double specularColor, double diffuseFactor, double specularFactor);
-double sphere_intersection(double* Ro, double* Rd, double* C, double r);
+double* sphere_intersection(double* Ro, double* Rd, double* C, double r);
 void writeP3(FILE* fh);
 
 // static inline functions

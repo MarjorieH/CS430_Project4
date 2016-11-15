@@ -12,23 +12,47 @@ void writeP3(FILE* fh) {
 
 // Calculate if the ray Ro->Rd will intersect with a sphere of center C and radius R
 // Return distance to intersection
-double sphere_intersection(double* Ro, double* Rd, double* C, double r) {
+double* sphere_intersection(double* Ro, double* Rd, double* C, double r) {
+
+  double* result = malloc(2 * sizeof(double));
+
   double a = sqr(Rd[0]) + sqr(Rd[1]) + sqr(Rd[2]);
   double b = 2 * (Rd[0] * (Ro[0] - C[0]) + Rd[1] * (Ro[1] - C[1]) + Rd[2] * (Ro[2] - C[2]));
   double c = sqr(Ro[0] - C[0]) + sqr(Ro[1] - C[1]) + sqr(Ro[2] - C[2]) - sqr(r);
 
   double det = sqr(b) - 4 * a * c;
-  if (det < 0) return -1; // no intersection
+  if (det < 0) { // no intersection
+      result[0] = -1;
+      result[1] = -1;
+      return result;
+  }
 
   det = sqrt(det);
 
   double t0 = (-b - det) / (2 * a);
-  if (t0 > 0) return t0;
+  if (t0 > 0) {
+    result[0] = t0;
+  }
+  else {
+    result[0] = -1;
+  }
 
   double t1 = (-b + det) / (2 * a);
-  if (t1 > 0) return t1;
+  if (t1 > 0) {
+    result[1] = t1;
+  }
+  else {
+    result[1] = -1;
+  }
 
-  return -1;
+  if (result[0] > result[1]) {
+    double temp;
+    temp = result[0];
+    result[0] = result[1];
+    result[1] = temp;
+  }
+
+  return result;
 }
 
 // Calculate if the ray Ro->Rd will intersect with a plane of position P and normal N
@@ -88,7 +112,7 @@ void raycast() {
           t = plane_intersection(Ro, Rd, physicalObjects[i].position, physicalObjects[i].plane.normal);
         }
         else if (physicalObjects[i].kind == 1) { // sphere
-          t = sphere_intersection(Ro, Rd, physicalObjects[i].position, physicalObjects[i].sphere.radius);
+          t= sphere_intersection(Ro, Rd, physicalObjects[i].position, physicalObjects[i].sphere.radius)[0];
         }
         else { // ???
           fprintf(stderr, "Unrecognized object.\n");
@@ -107,7 +131,7 @@ void raycast() {
         v3_scale(Rd, closestT, hitPoint);
         v3_add(Ro, hitPoint, hitPoint);
 
-        double* color = shade(closestObject, hitPoint, Rd, 0, 1);
+        double* color = shade(closestObject, hitPoint, Rd, 0, airRefractivity);
 
         pixmap[pixIndex].R = double_to_color(color[0]);
         pixmap[pixIndex].G = double_to_color(color[1]);
@@ -173,9 +197,6 @@ double* shade(Object objectHit, double* position, double* Ur, int level, double 
   }
   else {
 
-    // add in the contribution of the local illumination from the light sources to the object
-    v3_add(color, local_illumination(position, objectHit), color);
-
     level++; // increment level of recursion
     int kind = objectHit.kind;
 
@@ -215,7 +236,7 @@ double* shade(Object objectHit, double* position, double* Ur, int level, double 
           currentT = plane_intersection(modifiedPosition, reflectRay, currentObj.position, currentObj.plane.normal);
         }
         else if (currentObj.kind == 1) { // sphere
-          currentT = sphere_intersection(modifiedPosition, reflectRay, currentObj.position, currentObj.sphere.radius);
+          currentT = sphere_intersection(modifiedPosition, reflectRay, currentObj.position, currentObj.sphere.radius)[0];
         }
         else { // ???
           fprintf(stderr, "Unrecognized object.\n");
@@ -247,12 +268,47 @@ double* shade(Object objectHit, double* position, double* Ur, int level, double 
         color[1] += backgroundColor; // maybe add these instead of assign?
         color[2] += backgroundColor;
       }
-    }
+    } // end reflection if
 
     // check if we need to calculate refraction
     if (objectHit.refractivity > 0.0) {
-      // calculate refracted ray
+      // calculate refracted ray through the object
       double* refractedRay = calculate_refraction(rindex, objectHit.ior, Ur, surfaceNormal);
+
+      // start ray slightly off of the object to prevent static (self shading problem)
+      double* modifiedPosition = malloc(3 * sizeof(double));
+      v3_scale(refractedRay, epsilon, modifiedPosition);
+      v3_add(modifiedPosition, position, modifiedPosition);
+
+      double distance;
+      if (kind == 0) {
+        distance = epsilon; // distance to "back" of plane, negligibily small
+        //distance = plane_intersection(modifiedPosition, refractedRay, objectHit.position, objectHit.plane.normal);
+      }
+      else if (kind == 1) {
+        distance = sphere_intersection(modifiedPosition, refractedRay, objectHit.position, objectHit.sphere.radius)[0];
+      }
+      else { // ???
+        fprintf(stderr, "Unrecognized object.\n");
+        exit(1);
+      }
+
+      // calculate the position of the hit point on the "back" of the object
+      double* backPosition = malloc(3 * sizeof(double));
+      v3_scale(refractedRay, distance, backPosition);
+      v3_add(position, backPosition, backPosition);
+
+      double* nextSurfaceNormal = malloc(3 * sizeof(double)); // surface normal of the object
+      if (kind == 0) { // plane
+        nextSurfaceNormal = objectHit.plane.normal;
+        v3_scale(nextSurfaceNormal, -1, nextSurfaceNormal); // reverse the surface normal since we are on the "back" of the plane now
+      }
+      else { // sphere
+        v3_subtract(backPosition, objectHit.position, nextSurfaceNormal);
+      }
+      normalize(nextSurfaceNormal);
+
+      double* nextRefractedRay = calculate_refraction(objectHit.ior, airRefractivity, refractedRay, nextSurfaceNormal);
 
       // shoot a ray into space from the hit point in the direction refractedRay
       double bestRefractT = INFINITY;
@@ -268,14 +324,14 @@ double* shade(Object objectHit, double* position, double* Ur, int level, double 
 
         // start ray slightly off of the object to prevent static (self shading problem)
         double* modifiedPosition = malloc(3 * sizeof(double));
-        v3_scale(refractedRay, epsilon, modifiedPosition);
+        v3_scale(nextRefractedRay, epsilon, modifiedPosition);
         v3_add(modifiedPosition, position, modifiedPosition);
 
         if (currentObj.kind == 0) { // plane
-          currentT = plane_intersection(modifiedPosition, refractedRay, currentObj.position, currentObj.plane.normal);
+          currentT = plane_intersection(modifiedPosition, nextRefractedRay, currentObj.position, currentObj.plane.normal);
         }
         else if (currentObj.kind == 1) { // sphere
-          currentT = sphere_intersection(modifiedPosition, refractedRay, currentObj.position, currentObj.sphere.radius);
+          currentT = sphere_intersection(modifiedPosition, nextRefractedRay, currentObj.position, currentObj.sphere.radius)[0];
         }
         else { // ???
           fprintf(stderr, "Unrecognized object.\n");
@@ -289,15 +345,16 @@ double* shade(Object objectHit, double* position, double* Ur, int level, double 
       }
 
       if (bestRefractT > 0.0 && bestRefractT != INFINITY) {
+
         // calculate the position of the hit point on the refractObj
         double* newPosition = malloc(3 * sizeof(double));
-        v3_scale(refractedRay, bestRefractT, newPosition);
+        v3_scale(nextRefractedRay, bestRefractT, newPosition);
         v3_add(position, newPosition, newPosition);
 
-        double* refractColor = shade(refractObj, newPosition, refractedRay, level, objectHit.ior);
+        double* refractColor = shade(refractObj, newPosition, nextRefractedRay, level, objectHit.ior);
         v3_scale(refractColor, objectHit.refractivity, refractColor);
 
-        v3_scale(refractedRay, -1, refractedRay);
+        //v3_scale(refractedRay, -1, refractedRay);
         //v3_add(color, direct_shade(objectHit, position, color, refractedRay, newPosition), color);
 
         v3_add(refractColor, refractColor, color);
@@ -307,7 +364,10 @@ double* shade(Object objectHit, double* position, double* Ur, int level, double 
         color[1] += backgroundColor; // maybe add these instead of assign?
         color[2] += backgroundColor;
       }
-    }
+    } // end refraction if
+
+    // add in the contribution of the local illumination from the light sources to the object
+    v3_add(color, local_illumination(position, objectHit), color);
   }
 
   return color;
@@ -426,7 +486,7 @@ double* local_illumination(double* hitPoint, Object colorObj) {
         currentT = plane_intersection(newHitPoint, objToLight, currentObj.position, currentObj.plane.normal);
       }
       else if (currentObj.kind == 1) { // sphere
-        currentT = sphere_intersection(newHitPoint, objToLight, currentObj.position, currentObj.sphere.radius);
+        currentT = sphere_intersection(newHitPoint, objToLight, currentObj.position, currentObj.sphere.radius)[0];
       }
       else { // ???
         fprintf(stderr, "Unrecognized object.\n");
