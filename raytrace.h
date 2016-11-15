@@ -17,7 +17,7 @@
 
 #define ambience 0 // ambient lighting color
 #define specularPower 20 // degree of specular reflection, hard coded to 20
-#define backgroundColor 0.0 // background of the scene
+#define backgroundColor 0.1 // background of the scene
 
 // Structure to hold RGB pixel data
 typedef struct RGBpixel {
@@ -92,7 +92,7 @@ void printObjs();
 void printPixMap();
 void raycast();
 void read_scene(char* filename);
-double* shade(Object objectHit, double* position, double* Ur, int level);
+double* shade(Object objectHit, double* position, double* Ur, int level, double rindex);
 void skip_ws(FILE* json);
 double specular_reflection(double lightColor, double specularColor, double diffuseFactor, double specularFactor);
 double sphere_intersection(double* Ro, double* Rd, double* C, double r);

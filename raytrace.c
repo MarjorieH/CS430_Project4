@@ -107,7 +107,7 @@ void raycast() {
         v3_scale(Rd, closestT, hitPoint);
         v3_add(Ro, hitPoint, hitPoint);
 
-        double* color = shade(closestObject, hitPoint, Rd, 0);
+        double* color = shade(closestObject, hitPoint, Rd, 0, 1);
 
         pixmap[pixIndex].R = double_to_color(color[0]);
         pixmap[pixIndex].G = double_to_color(color[1]);
@@ -137,7 +137,7 @@ double* calculate_refraction(double externalIOR, double transmitIOR, double* inc
   double* transmittedRay = malloc(3 * sizeof(double));
 
   double eta, c1, cs2;
-  eta = externalIOR / transmitIOR; // might need to switch these... relative index of refraction
+  eta = externalIOR / transmitIOR;
   c1 = v3_dot(incomingRay, normal) * -1; // cos(theta)
   cs2 = 1 - eta * eta * (1 - c1 * c1); // cos^2(phi)
 
@@ -157,7 +157,7 @@ double* calculate_refraction(double externalIOR, double transmitIOR, double* inc
   return transmittedRay;
 }
 
-double* shade(Object objectHit, double* position, double* Ur, int level) {
+double* shade(Object objectHit, double* position, double* Ur, int level, double rindex) {
 
   double* color = malloc(3 * sizeof(double));
 
@@ -168,7 +168,7 @@ double* shade(Object objectHit, double* position, double* Ur, int level) {
     color[2] = 0.0;
   }
   else {
-
+    level++; // increment level of recursion
     int kind = objectHit.kind;
 
     // get object's surface normal
@@ -185,7 +185,7 @@ double* shade(Object objectHit, double* position, double* Ur, int level) {
     double* Um = calculate_reflection(Ur, surfaceNormal);
 
     // shoot a ray into space from the hit position in the direction Um
-    double bestT = INFINITY;
+    double bestReflectT = INFINITY;
     Object bounceObj;
     for (int i = 0; i < numPhysicalObjects; i++) {
       double currentT = 0.0;
@@ -212,44 +212,94 @@ double* shade(Object objectHit, double* position, double* Ur, int level) {
         exit(1);
       }
 
-      if (currentT < bestT && currentT > 0.0) {
-        bestT = currentT;
+      if (currentT < bestReflectT && currentT > 0.0) {
+        bestReflectT = currentT;
         bounceObj = currentObj;
       }
     }
 
-    if (bestT > 0.0 && bestT != INFINITY) {
+    if (bestReflectT > 0.0 && bestReflectT != INFINITY) {
       // calculate the position of the hit point on the bounceObj
       double* newPosition = malloc(3 * sizeof(double));
-      v3_scale(Um, bestT, newPosition);
+      v3_scale(Um, bestReflectT, newPosition);
       v3_add(position, newPosition, newPosition);
 
       // recursively call the shade routine for the new hit point to get its color
-      level++;
-      double* reflectColor = shade(bounceObj, newPosition, Um, level);
+      double* reflectColor = shade(bounceObj, newPosition, Um, level, rindex);
       v3_scale(reflectColor, bounceObj.reflectivity, reflectColor); // scale the color based on the object's reflectivity
 
-      // calculate refraction
-      double* refractedRay = calculate_refraction(objectHit.ior, bounceObj.ior, Um, surfaceNormal);
-      double* refractColor = shade(bounceObj, newPosition, refractedRay, level);
-      v3_scale(refractColor, bounceObj.refractivity, refractColor);
-
-      v3_add(refractColor, refractColor, color);
+      v3_add(reflectColor, color, color);
 
       color = direct_shade(objectHit, position, color, Um, newPosition);
     }
     else { // the bounce ray did not hit anything, assign background color
       color[0] = backgroundColor;
-      color[1] = backgroundColor;
+      color[1] = backgroundColor; // maybe add these instead of assign?
       color[2] = backgroundColor;
     }
+
+    // calculate refracted ray
+    double* refractedRay = calculate_refraction(rindex, objectHit.ior, Ur, surfaceNormal);
+
+    // shoot a ray into space from the hit point in the direction refractedRay
+    double bestRefractT = INFINITY;
+    Object refractObj;
+    for (int i = 0; i < numPhysicalObjects; i++) {
+      double currentT = 0.0;
+      Object currentObj = physicalObjects[i];
+
+      // skip over the object we are shading
+      if (obj_compare(currentObj, objectHit)) {
+        continue;
+      }
+
+      // start ray slightly off of the object to prevent static (self shading problem)
+      double* modifiedPosition = malloc(3 * sizeof(double));
+      v3_scale(refractedRay, epsilon, modifiedPosition);
+      v3_add(modifiedPosition, position, modifiedPosition);
+
+      if (currentObj.kind == 0) { // plane
+        currentT = plane_intersection(modifiedPosition, refractedRay, currentObj.position, currentObj.plane.normal);
+      }
+      else if (currentObj.kind == 1) { // sphere
+        currentT = sphere_intersection(modifiedPosition, refractedRay, currentObj.position, currentObj.sphere.radius);
+      }
+      else { // ???
+        fprintf(stderr, "Unrecognized object.\n");
+        exit(1);
+      }
+
+      if (currentT < bestRefractT && currentT > 0.0) {
+        bestRefractT = currentT;
+        refractObj = currentObj;
+      }
+    }
+
+    if (bestRefractT > 0.0 && bestRefractT != INFINITY) {
+      // calculate the position of the hit point on the refractObj
+      double* newPosition = malloc(3 * sizeof(double));
+      v3_scale(refractedRay, bestRefractT, newPosition);
+      v3_add(position, newPosition, newPosition);
+
+      double* refractColor = shade(refractObj, newPosition, refractedRay, level, objectHit.ior);
+      v3_scale(refractColor, objectHit.refractivity, refractColor);
+
+      v3_add(refractColor, refractColor, color);
+
+      //color = direct_shade(objectHit, position, color, refractedRay, newPosition);
+    }
+    else {
+      color[0] = backgroundColor;
+      color[1] = backgroundColor; // maybe add these instead of assign?
+      color[2] = backgroundColor;
+    }
+
+    // add in the contribution of the local illumination from the light sources to the object
     v3_add(color, local_illumination(position, objectHit), color);
   }
 
   return color;
 }
-
-
 
 double* direct_shade(Object shadeObj, double* hitPoint, double* lightColor, double* lightDirection, double* lightPosition) {
 
