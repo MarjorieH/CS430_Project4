@@ -18,7 +18,7 @@
 
 #define ambience 0 // ambient lighting color
 #define specularPower 20 // degree of specular reflection, hard coded to 20
-#define backgroundColor 0.1 // background of the scene
+#define backgroundColor 0.0 // background of the scene
 
 // Structure to hold RGB pixel data
 typedef struct RGBpixel {
