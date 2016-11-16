@@ -156,6 +156,7 @@ double* calculate_reflection(double* V1, double* V2) {
   return RV;
 }
 
+// helper function that returns the refraction of the incomingRay
 double* calculate_refraction(double externalIOR, double transmitIOR, double* incomingRay, double* normal) {
 
   double* transmittedRay = malloc(3 * sizeof(double));
@@ -184,6 +185,7 @@ double* calculate_refraction(double externalIOR, double transmitIOR, double* inc
   return transmittedRay;
 }
 
+// recursive ray tracing function, colors objects based on their local illumination, reflectivity, and refractivity
 double* shade(Object objectHit, double* position, double* Ur, int level, double rindex) {
 
   double* color = malloc(3 * sizeof(double));
@@ -260,11 +262,12 @@ double* shade(Object objectHit, double* position, double* Ur, int level, double 
 
         // recursively call the shade routine for the new hit point to get its color
         double* reflectColor = shade(bounceObj, newPosition, reflectRay, level, rindex);
-        v3_scale(reflectColor, objectHit.reflectivity, reflectColor); // scale the color based on the object's reflectivity, maybe the object hit instead of the bounceObj?
+        v3_scale(reflectColor, objectHit.reflectivity, reflectColor); // scale the color based on the object's reflectivity
+
+        // add in the direct shading of the reflected object as if it were a light shining on the object it is hitting
+        v3_add(color, direct_shade(bounceObj, newPosition, reflectColor, reflectRay, position), color);
 
         v3_add(reflectColor, color, color);
-
-        //v3_add(color, direct_shade(objectHit, position, color, reflectRay, newPosition), color); // negate reflectRay
       }
       else { // the bounce ray did not hit anything, assign background color
         color[0] += backgroundColor;
@@ -299,7 +302,7 @@ double* shade(Object objectHit, double* position, double* Ur, int level, double 
       // calculate the position of the hit point on the "back" of the object
       double* backPosition = malloc(3 * sizeof(double));
       v3_scale(refractedRay, distance, backPosition);
-      v3_add(position, backPosition, backPosition);
+      v3_add(modifiedPosition, backPosition, backPosition);
 
       double* nextSurfaceNormal = malloc(3 * sizeof(double)); // surface normal of the object
       if (kind == 0) { // plane
@@ -328,7 +331,7 @@ double* shade(Object objectHit, double* position, double* Ur, int level, double 
         // start ray slightly off of the object to prevent static (self shading problem)
         double* modifiedPosition = malloc(3 * sizeof(double));
         v3_scale(nextRefractedRay, epsilon, modifiedPosition);
-        v3_add(modifiedPosition, position, modifiedPosition);
+        v3_add(modifiedPosition, backPosition, modifiedPosition);
 
         if (currentObj.kind == 0) { // plane
           currentT = plane_intersection(modifiedPosition, nextRefractedRay, currentObj.position, currentObj.plane.normal);
@@ -374,6 +377,7 @@ double* shade(Object objectHit, double* position, double* Ur, int level, double 
   return color;
 }
 
+// helper function that returns a color based on a direct lighting source
 double* direct_shade(Object shadeObj, double* hitPoint, double* lightColor, double* lightDirection, double* lightPosition) {
 
   // initialize values for color
@@ -424,6 +428,7 @@ double* direct_shade(Object shadeObj, double* hitPoint, double* lightColor, doub
   return color;
 }
 
+// illumination function from project 3, calculates the color of an object based on the light sources around it
 double* local_illumination(double* hitPoint, Object colorObj) {
 
   // initialize values for color
